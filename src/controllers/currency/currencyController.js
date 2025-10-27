@@ -4,7 +4,6 @@ require("dotenv").config();
 // Import models
 const { Currency } = require('../../models/currency/Currency');
 const { MarkupFee } = require('../../models/markup/MarkupFee');
-const { City } = require('../../models/city/City');
 
 // Import utilities
 const { successResponse, errorResponse } = require('../../middleware/response/responseFormatter');

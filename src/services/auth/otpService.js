@@ -1,59 +1,109 @@
-const bcrypt = require('bcryptjs');
-const { Sequelize } = require('sequelize');
+const { Op } = require('sequelize');
 const OTP = require('../../models/otp/OTP');
 
 class OTPService {
-  async generateOTP(email) {
-    // Generate 6-digit OTP
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Hash the OTP before storing
-    const hashedCode = await bcrypt.hash(code, 10);
+  async generateOTP(identifier, type = 'email_verification') {
+    try {
+      console.log(`Generating OTP for identifier: ${identifier}, type: ${type}`);
+      
+      // Generate 6-digit OTP
+const code = Math.floor(1000 + Math.random() * 9000).toString();      
+      // Set expiration (default 10 minutes)
+      const expiresAt = new Date(Date.now() + (process.env.OTP_EXPIRY_MINUTES || 10) * 60 * 1000);
 
-    // Set expiry (5 minutes from now)
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + parseInt(process.env.OTP_EXPIRY_MINUTES || '5'));
+      // Delete any existing OTPs for this email/identifier
+      await OTP.destroy({
+        where: {
+          email: identifier
+        }
+      });
 
-    // Invalidate previous OTPs for this email
-    await OTP.update(
-      { isUsed: true },
-      { where: { email, isUsed: false } }
-    );
+      // Create new OTP
+      const otp = await OTP.create({
+        email: identifier,
+        code,
+        expiresAt,
+        isUsed: false
+      });
 
-    // Create new OTP
-    const otp = await OTP.create({
-      code: hashedCode,
-      email,
-      expiresAt
-    });
+      console.log(`OTP generated successfully for ${identifier}: ${code}`);
 
-    return { id: otp.id, code, expiresAt };
+      return {
+        code,
+        expiresAt,
+        id: otp.id
+      };
+    } catch (error) {
+      console.error('Error generating OTP:', error);
+      throw new Error(`Failed to generate OTP: ${error.message}`);
+    }
   }
 
-  async verifyOTP(email, code) {
-    const otp = await OTP.findOne({
-      where: {
-        email,
-        isUsed: false,
-        expiresAt: { [Sequelize.Op.gt]: new Date() }
-      },
-      order: [['createdAt', 'DESC']]
-    });
+  async verifyOTP(identifier, code, type = 'email_verification') {
+    try {
+      console.log(`Verifying OTP for identifier: ${identifier}, code: ${code}`);
+      
+      const otp = await OTP.findOne({
+        where: {
+          email: identifier,
+          code: code,
+          expiresAt: {
+            [Op.gt]: new Date()
+          },
+          isUsed: false
+        }
+      });
 
-    if (!otp) {
+      if (!otp) {
+        throw new Error('OTP not found, expired or already used');
+      }
+
+      // Mark OTP as used
+      otp.isUsed = true;
+      await otp.save();
+
+      console.log(`OTP verified successfully for ${identifier}`);
+      return true;
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      throw new Error(`OTP verification failed: ${error.message}`);
+    }
+  }
+
+  async cleanupExpiredOTPs() {
+    try {
+      const result = await OTP.destroy({
+        where: {
+          expiresAt: {
+            [Op.lt]: new Date()
+          }
+        }
+      });
+      console.log(`Cleaned up ${result} expired OTPs`);
+    } catch (error) {
+      console.error('Error cleaning up expired OTPs:', error);
+    }
+  }
+
+  // Method to check if OTP exists and is valid
+  async checkOTP(identifier, code) {
+    try {
+      const otp = await OTP.findOne({
+        where: {
+          email: identifier,
+          code: code,
+          expiresAt: {
+            [Op.gt]: new Date()
+          },
+          isUsed: false
+        }
+      });
+
+      return !!otp;
+    } catch (error) {
+      console.error('Error checking OTP:', error);
       return false;
     }
-
-    // Verify OTP code
-    const isValid = await bcrypt.compare(code, otp.code);
-    
-    if (isValid) {
-      // Mark OTP as used
-      await OTP.update({ isUsed: true }, { where: { id: otp.id } });
-      return true;
-    }
-
-    return false;
   }
 }
 

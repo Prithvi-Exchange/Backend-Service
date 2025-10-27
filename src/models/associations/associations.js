@@ -2,6 +2,7 @@ const CustomerSession = require('../CustomerSession/CustomerSession');
 const CustomerEvent = require('../CustomerEvent/CustomerEvent');
 const ForexRequest = require('../currencyRequest/ForexRequest');
 const { User } = require('../user/User'); // Ensure User model is exported properly
+const RefreshToken = require('../auth/RefreshToken');
 
 const setupAssociations = () => {
   /** ----------------------------------------
@@ -91,6 +92,21 @@ const setupAssociations = () => {
     as: 'user',
     onDelete: 'SET NULL',
     onUpdate: 'CASCADE'
+  });
+
+  /** ----------------------------------------
+   *  User ↔ RefreshToken (One-to-Many) - FIXED
+   * ---------------------------------------- */
+  User.hasMany(RefreshToken, {
+    foreignKey: 'userId', // Sequelize model field name
+    as: 'refreshTokens',
+    onDelete: 'CASCADE'
+  });
+
+  RefreshToken.belongsTo(User, {
+    foreignKey: 'userId', // Sequelize model field name
+    as: 'user',
+    onDelete: 'CASCADE'
   });
 };
 

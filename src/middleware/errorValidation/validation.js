@@ -1,100 +1,191 @@
+// src/middleware/errorValidation/validation.js
 const { body } = require('express-validator');
-
-// Custom password strength validator
-const passwordStrengthValidator = (value) => {
-  if (value.length < 8 || value.length > 15) {
-    throw new Error('Password must be between 8 and 15 characters long');
-  }
-  
-  const strongRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
-  if (!strongRegex.test(value)) {
-    throw new Error('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character');
-  }
-  
-  return true;
-};
-
-// Custom phone number validator for international format
-const phoneNumberValidator = (value) => {
-  const phoneRegex = /^\+\d{10,15}$/; // + followed by 10-15 digits
-  if (!phoneRegex.test(value)) {
-    throw new Error('Phone number must be in international format like +918178352411');
-  }
-  return true;
-};
 
 exports.validateSignup = [
   body('name')
-    .isLength({ min: 2 })
     .trim()
-    .escape()
-    .withMessage('Name must be at least 2 characters long'),
+    .isLength({ min: 2, max: 50 })
+    .withMessage('Name must be between 2 and 50 characters')
+    .matches(/^[a-zA-Z\s]+$/)
+    .withMessage('Name can only contain letters and spaces'),
   
   body('email')
+    .optional()
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
   
   body('phoneNumber')
-    .custom(phoneNumberValidator)
-    .withMessage('Please provide a valid phone number in international format (e.g., +918178352411)'),
+    .optional()
+    .matches(/^\+[1-9]\d{1,14}$/)
+    .withMessage('Please provide a valid international phone number format (e.g., +918178352411)'),
   
   body('password')
     .isLength({ min: 8, max: 15 })
-    .withMessage('Password must be between 8 and 15 characters long')
-    .custom(passwordStrengthValidator)
+    .withMessage('Password must be between 8 and 15 characters')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character')
 ];
 
 exports.validateLogin = [
   body('email')
-    .if(body('email').exists())
+    .optional()
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
   
   body('phoneNumber')
-    .if(body('phoneNumber').exists())
-    .custom(phoneNumberValidator)
-    .withMessage('Please provide a valid phone number in international format (e.g., +918178352411)'),
+    .optional()
+    .matches(/^\+[1-9]\d{1,14}$/)
+    .withMessage('Please provide a valid international phone number format'),
   
   body('password')
-    .notEmpty()
-    .withMessage('Password is required')
+    .isLength({ min: 1 })
+    .withMessage('Password is required'),
+  
+  body().custom((value, { req }) => {
+    if (!req.body.email && !req.body.phoneNumber) {
+      throw new Error('Either email or phone number is required');
+    }
+    return true;
+  })
+];
+
+exports.validateOtpLoginRequest = [
+  body('email')
+    .optional()
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email'),
+  
+  body('phoneNumber')
+    .optional()
+    .matches(/^\+[1-9]\d{1,14}$/)
+    .withMessage('Please provide a valid international phone number format'),
+  
+  body().custom((value, { req }) => {
+    if (!req.body.email && !req.body.phoneNumber) {
+      throw new Error('Either email or phone number is required for OTP login');
+    }
+    return true;
+  })
+];
+
+exports.validateOtpLogin = [
+  body('email')
+    .optional()
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email'),
+  
+  body('phoneNumber')
+    .optional()
+    .matches(/^\+[1-9]\d{1,14}$/)
+    .withMessage('Please provide a valid international phone number format'),
+  
+  body('otp')
+    .isLength({ min: 4, max: 4 })
+    .isNumeric()
+    .withMessage('OTP must be 4 digits'),
+  
+  body().custom((value, { req }) => {
+    if (!req.body.email && !req.body.phoneNumber) {
+      throw new Error('Either email or phone number is required');
+    }
+    return true;
+  })
 ];
 
 exports.validateVerifyOtp = [
   body('email')
+    .optional()
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
   
+  body('phoneNumber')
+    .optional()
+    .matches(/^\+[1-9]\d{1,14}$/)
+    .withMessage('Please provide a valid international phone number format'),
+  
   body('otp')
-    .isLength({ min: 6, max: 6 })
+    .optional()
+    .isLength({ min: 4, max: 4 })
     .isNumeric()
-    .withMessage('OTP must be 6 digits')
+    .withMessage('Email OTP must be 4 digits'),
+  
+  body('phoneOtp')
+    .optional()
+    .isLength({ min: 4, max: 4 })
+    .isNumeric()
+    .withMessage('Phone OTP must be 4 digits'),
+  
+  body().custom((value, { req }) => {
+    if (!req.body.email && !req.body.phoneNumber) {
+      throw new Error('Either email or phone number is required');
+    }
+    if (!req.body.otp && !req.body.phoneOtp) {
+      throw new Error('At least one OTP (email or phone) is required');
+    }
+    return true;
+  })
 ];
 
 exports.validatePasswordResetRequest = [
   body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid email')
-];
-
-exports.validatePasswordReset = [
-  body('email')
+    .optional()
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
   
+  body('phoneNumber')
+    .optional()
+    .matches(/^\+[1-9]\d{1,14}$/)
+    .withMessage('Please provide a valid international phone number format'),
+  
+  body().custom((value, { req }) => {
+    if (!req.body.email && !req.body.phoneNumber) {
+      throw new Error('Either email or phone number is required');
+    }
+    return true;
+  })
+];
+
+exports.validatePasswordReset = [
   body('token')
     .notEmpty()
     .withMessage('Reset token is required'),
   
   body('newPassword')
     .isLength({ min: 8, max: 15 })
-    .withMessage('Password must be between 8 and 15 characters long')
-    .custom(passwordStrengthValidator)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character')
+    .withMessage('Password must be between 8 and 15 characters')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
+  
+  body('email')
+    .optional()
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email'),
+  
+  body('phoneNumber')
+    .optional()
+    .matches(/^\+[1-9]\d{1,14}$/)
+    .withMessage('Please provide a valid international phone number format'),
+  
+  body().custom((value, { req }) => {
+    if (!req.body.email && !req.body.phoneNumber) {
+      throw new Error('Either email or phone number is required');
+    }
+    return true;
+  })
+];
+
+// New validation for refresh token
+exports.validateRefreshToken = [
+  body('refreshToken')
+    .notEmpty()
+    .withMessage('Refresh token is required')
+    .isLength({ min: 36 })
+    .withMessage('Invalid refresh token format')
 ];
