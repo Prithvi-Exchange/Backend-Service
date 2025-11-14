@@ -22,7 +22,7 @@ if (config.use_env_variable) {
 
 /* This part of the code snippet is reading the contents of the current directory synchronously using
 `fs.readdirSync(__dirname)`. It then filters the files based on certain conditions using the
-`filter` method: */
+`filter` method: */ 
 fs
   .readdirSync(__dirname)
   .filter(file => {
