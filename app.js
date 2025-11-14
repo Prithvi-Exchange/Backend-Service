@@ -25,15 +25,21 @@ const customerEventRoutes = require('./src/routes/customerEvent/customerEvent');
 const app = express();
 
 // Connect to DB and setup associations (async safety)
+// app.js (snippet)
 (async () => {
   try {
-    await connectDB();
-    await setupAssociations();
+    const ok = await connectDB();
+    if (!ok) {
+      console.warn('Initial DB setup failed — continuing without DB. Health checks will show DB status.');
+    } else {
+      await setupAssociations();
+    }
   } catch (err) {
-    console.error('Initial DB setup failed:', err);
-    // don't crash app in serverless environment; let healthchecks show status
+    console.error('Initial DB setup error:', err);
+    // Continue — do not throw or exit in serverless
   }
 })();
+
 
 // Security
 app.use(helmet({
