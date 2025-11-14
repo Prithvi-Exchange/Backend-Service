@@ -8,11 +8,12 @@ exports.authenticate = async (req, res, next) => {
     const token = authHeader?.replace('Bearer ', '');
 
     if (!token) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
         error: {
           message: 'Access denied. No token provided.',
           type: 'AUTH_ERROR',
+          code: 'NO_ACCESS_TOKEN',
           timestamp: new Date().toISOString()
         }
       });
@@ -33,31 +34,62 @@ exports.authenticate = async (req, res, next) => {
           }
         });
       }
+
       return res.status(401).json({
         success: false,
         error: {
           message: 'Invalid access token',
           type: 'AUTH_ERROR',
+          code: 'INVALID_ACCESS_TOKEN',
           timestamp: new Date().toISOString()
         }
       });
     }
 
+    // Retrieve user
     const user = await User.findByPk(decoded.userId);
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
         error: {
           message: 'Invalid token: user not found',
           type: 'AUTH_ERROR',
+          code: 'USER_NOT_FOUND',
           timestamp: new Date().toISOString()
         }
       });
     }
 
-    req.user = user;
+    // Optional: extract deviceUUID from headers (sent by app)
+    const deviceUuid = req.header('x-device-uuid') || null;
+
+    // Attach normalized context
+    req.user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      user_type: user.user_type,
+      is_admin: user.is_admin
+    };
+
+    // Additional device metadata for downstream services/logs
+    req.userContext = {
+      deviceUuid,
+      userAgent: req.get('User-Agent'),
+      ipAddress: req.ip
+    };
+
     next();
   } catch (error) {
-    next(error);
+    console.error('authenticate middleware error:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        message: 'Internal server error during authentication',
+        type: 'SERVER_ERROR',
+        code: 'AUTH_MIDDLEWARE_FAILURE',
+        timestamp: new Date().toISOString()
+      }
+    });
   }
 };

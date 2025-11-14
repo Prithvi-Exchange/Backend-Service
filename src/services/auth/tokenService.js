@@ -20,16 +20,19 @@ class TokenService {
   }
 
   // Store refresh token in database
-  async storeRefreshToken(token, userId, deviceInfo = {}, ipAddress = null) {
+  async storeRefreshToken(token, userId, deviceInfo = {}, ipAddress = null, deviceUuid = null, isBiometricEnabled = false) {
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
     return await RefreshToken.create({
       token,
       userId,
       expiresAt,
+      isRevoked: false,
       deviceInfo,
-      ipAddress
+      ipAddress,
+      deviceUuid,
+      isBiometricEnabled
     });
   }
 
@@ -45,10 +48,9 @@ class TokenService {
     }
   }
 
-  // Verify refresh token and return user data
+  // Verify refresh token and return user data (via association)
   async verifyRefreshToken(token) {
     try {
-      // Find the token in database
       const refreshToken = await RefreshToken.findOne({
         where: {
           token,
@@ -76,7 +78,7 @@ class TokenService {
     );
   }
 
-  // Revoke all refresh tokens for a user
+  // Revoke all tokens for a user
   async revokeAllUserTokens(userId) {
     await RefreshToken.update(
       { isRevoked: true },
@@ -95,8 +97,8 @@ class TokenService {
     return result;
   }
 
-  // Generate both tokens
-  async generateTokens(user, deviceInfo = {}, ipAddress = null) {
+  // Generate access & refresh, store refresh with deviceUuid + biometric flag
+  async generateTokens(user, deviceInfo = {}, ipAddress = null, deviceUuid = null, isBiometricEnabled = false) {
     const accessToken = this.generateAccessToken({
       userId: user.id,
       email: user.email,
@@ -106,14 +108,52 @@ class TokenService {
 
     const refreshToken = this.generateRefreshToken();
 
-    // Store refresh token
-    await this.storeRefreshToken(refreshToken, user.id, deviceInfo, ipAddress);
+    await this.storeRefreshToken(
+      refreshToken,
+      user.id,
+      deviceInfo,
+      ipAddress,
+      deviceUuid,
+      isBiometricEnabled
+    );
 
     return {
       accessToken,
       refreshToken,
-      // accessTokenExpires: process.env.JWT_ACCESS_EXPIRES_IN || '15m'
     };
+  }
+
+  // Mark biometric enabled for user+device (active tokens)
+  async setBiometricEnabled(userId, deviceUuid, enabled) {
+    if (!deviceUuid) {
+      throw new Error('deviceUuid is required');
+    }
+    const [count] = await RefreshToken.update(
+      { isBiometricEnabled: !!enabled },
+      {
+        where: {
+          userId,
+          deviceUuid,
+          isRevoked: false,
+          expiresAt: { [Op.gt]: new Date() }
+        }
+      }
+    );
+    return count;
+  }
+
+  // Check if there exists an active biometric-enabled token for user+device
+  async hasActiveBiometricForDevice(userId, deviceUuid) {
+    const row = await RefreshToken.findOne({
+      where: {
+        userId,
+        deviceUuid,
+        isBiometricEnabled: true,
+        isRevoked: false,
+        expiresAt: { [Op.gt]: new Date() }
+      }
+    });
+    return !!row;
   }
 
   // Get user's active sessions

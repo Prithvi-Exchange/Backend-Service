@@ -5,13 +5,13 @@ const otpService = require('./otpService');
 const emailService = require('./emailService');
 const tokenService = require('./tokenService');
 const { Sequelize } = require('sequelize');
-const { generateUsername } = require('../../utils/universalFunction.mjs');
+const { generateUsername } = require('../../utils/universalFunction.js');
 
 class AuthService {
   async signup(name, email, phoneNumber, password) {
     try {
       console.log(`Signup attempt: ${name}, ${email}, ${phoneNumber}`);
-      
+
       // Check if user already exists with email or phone
       const existingUser = await User.findOne({
         where: {
@@ -115,11 +115,10 @@ class AuthService {
     }
   }
 
-  async login(email, phoneNumber, password, deviceInfo = {}, ipAddress = null) {
+  async login(email, phoneNumber, password, deviceInfo = {}, ipAddress = null, deviceUuid = null) {
     try {
       console.log("Login attempt:", { email, phoneNumber });
-      
-      // Find user by email or phone
+
       const conditions = [];
       if (email) conditions.push({ email });
       if (phoneNumber) conditions.push({ phoneNumber });
@@ -129,39 +128,29 @@ class AuthService {
       }
 
       const user = await User.findOne({
-        where: {
-          [Sequelize.Op.or]: conditions
-        }
+        where: { [Sequelize.Op.or]: conditions }
       });
 
-      if (!user) {
-        throw new Error('User not found');
-      }
+      if (!user) throw new Error('User not found');
 
-      // Verify password
       const isValidPassword = await user.validatePassword(password);
-      if (!isValidPassword) {
-        throw new Error('Invalid password');
-      }
+      if (!isValidPassword) throw new Error('Invalid password');
 
-      // Check verification status
       const verificationStatus = {};
-      
-      if (user.email && !user.isEmailVerified) {
-        verificationStatus.email = 'not_verified';
-      }
-      
-      if (user.phoneNumber && !user.isPhoneVerified) {
-        verificationStatus.phone = 'not_verified';
-      }
+      if (user.email && !user.isEmailVerified) verificationStatus.email = 'not_verified';
+      if (user.phoneNumber && !user.isPhoneVerified) verificationStatus.phone = 'not_verified';
 
-      // If any verification pending, don't allow password login
       if (Object.keys(verificationStatus).length > 0) {
         throw new Error('Account verification pending. Please verify your email/phone first.');
       }
 
-      // Generate tokens using token service
-      const tokens = await tokenService.generateTokens(user, deviceInfo, ipAddress);
+      const tokens = await tokenService.generateTokens(
+        user,
+        deviceInfo,
+        ipAddress,
+        deviceUuid,       // <- NEW
+        false             // isBiometricEnabled initially false unless you choose otherwise
+      );
 
       return {
         tokens,
@@ -189,8 +178,7 @@ class AuthService {
   async requestOtpLogin(email, phoneNumber) {
     try {
       console.log("OTP login request:", { email, phoneNumber });
-      
-      // Find user by email or phone
+
       const conditions = [];
       if (email) conditions.push({ email });
       if (phoneNumber) conditions.push({ phoneNumber });
@@ -199,56 +187,35 @@ class AuthService {
         throw new Error('Either email or phone number is required for OTP login');
       }
 
-      const user = await User.findOne({
-        where: {
-          [Sequelize.Op.or]: conditions
-        }
-      });
+      const user = await User.findOne({ where: { [Sequelize.Op.or]: conditions } });
 
       if (!user) {
-        // For security, don't reveal if user exists or not
-        return {
-          message: 'If the account exists, OTP has been sent'
-        };
+        return { message: 'If the account exists, OTP has been sent' };
       }
 
       const otpResults = {};
 
-      // Send OTP based on provided identifier
       if (email) {
         try {
           const emailOtp = await otpService.generateOTP(email, 'email_login');
           await emailService.sendOTPEmail(email, emailOtp.code);
-          otpResults.email = {
-            message: 'OTP sent to email for login',
-            expiresAt: emailOtp.expiresAt
-          };
+          otpResults.email = { message: 'OTP sent to email for login', expiresAt: emailOtp.expiresAt };
         } catch (error) {
           console.error('Failed to send email OTP:', error);
-          otpResults.email = {
-            message: 'Failed to send email OTP',
-            error: error.message
-          };
+          otpResults.email = { message: 'Failed to send email OTP', error: error.message };
         }
       }
 
       if (phoneNumber) {
         try {
           const phoneOtp = await otpService.generateOTP(phoneNumber, 'phone_login');
-          // TODO: Implement SMS service for phone OTP
           if (process.env.NODE_ENV === 'development') {
             console.log(`Login OTP for phone ${phoneNumber}: ${phoneOtp.code}`);
           }
-          otpResults.phone = {
-            message: 'OTP sent to phone for login',
-            expiresAt: phoneOtp.expiresAt
-          };
+          otpResults.phone = { message: 'OTP sent to phone for login', expiresAt: phoneOtp.expiresAt };
         } catch (error) {
           console.error('Failed to send phone OTP:', error);
-          otpResults.phone = {
-            message: 'Failed to send phone OTP',
-            error: error.message
-          };
+          otpResults.phone = { message: 'Failed to send phone OTP', error: error.message };
         }
       }
 
@@ -263,37 +230,29 @@ class AuthService {
     }
   }
 
-  async verifyOtpLogin(email, phoneNumber, otpCode, deviceInfo = {}, ipAddress = null) {
+  async verifyOtpLogin(email, phoneNumber, otpCode, deviceInfo = {}, ipAddress = null, deviceUuid = null) {
     try {
       const identifier = email || phoneNumber;
-      const identifierType = email ? 'email' : 'phone';
-      
+
       console.log(`OTP login verification: ${identifier}, code: ${otpCode}`);
-      
-      // Verify OTP
+
       const isValid = await otpService.verifyOTP(identifier, otpCode);
+      if (!isValid) throw new Error('Invalid OTP');
 
-      if (!isValid) {
-        throw new Error('Invalid OTP');
-      }
-
-      // Find user by email or phone
       const conditions = [];
       if (email) conditions.push({ email });
       if (phoneNumber) conditions.push({ phoneNumber });
 
-      const user = await User.findOne({
-        where: {
-          [Sequelize.Op.or]: conditions
-        }
-      });
+      const user = await User.findOne({ where: { [Sequelize.Op.or]: conditions } });
+      if (!user) throw new Error('User not found');
 
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      // Generate tokens using token service
-      const tokens = await tokenService.generateTokens(user, deviceInfo, ipAddress);
+      const tokens = await tokenService.generateTokens(
+        user,
+        deviceInfo,
+        ipAddress,
+        deviceUuid,     // <- NEW
+        false
+      );
 
       return {
         tokens,
@@ -318,27 +277,24 @@ class AuthService {
     }
   }
 
-  async verifyOtp(email, otpCode, phoneNumber, phoneOtp, deviceInfo = {}, ipAddress = null) {
+  async verifyOtp(email, otpCode, phoneNumber, phoneOtp, deviceInfo = {}, ipAddress = null, deviceUuid = null) {
     try {
       console.log(`OTP verification: email=${email}, phone=${phoneNumber}`);
-      
-      const user = await User.findOne({ 
-        where: { 
+
+      const user = await User.findOne({
+        where: {
           [Sequelize.Op.or]: [
             { email: email || null },
             { phoneNumber: phoneNumber || null }
           ]
-        } 
+        }
       });
 
-      if (!user) {
-        throw new Error('User not found. Please complete the signup process.');
-      }
+      if (!user) throw new Error('User not found. Please complete the signup process.');
 
       const verificationResults = {};
       let isFullyVerified = true;
 
-      // Verify email OTP if provided
       if (email && otpCode) {
         try {
           const isValidEmailOtp = await otpService.verifyOTP(email, otpCode);
@@ -355,7 +311,6 @@ class AuthService {
         }
       }
 
-      // Verify phone OTP if provided
       if (phoneNumber && phoneOtp) {
         try {
           const isValidPhoneOtp = await otpService.verifyOTP(phoneNumber, phoneOtp);
@@ -378,8 +333,13 @@ class AuthService {
         throw new Error('Some OTPs are invalid. Please check and try again.');
       }
 
-      // Generate tokens using token service
-      const tokens = await tokenService.generateTokens(user, deviceInfo, ipAddress);
+      const tokens = await tokenService.generateTokens(
+        user,
+        deviceInfo,
+        ipAddress,
+        deviceUuid,   // <- NEW
+        false
+      );
 
       return {
         tokens,
@@ -405,18 +365,24 @@ class AuthService {
     }
   }
 
-  // Refresh tokens method
   async refreshTokens(refreshToken, deviceInfo = {}, ipAddress = null) {
     try {
       console.log("Refresh token attempt");
-      
+
       const user = await tokenService.verifyRefreshToken(refreshToken);
-      
+
       // Revoke the old refresh token
       await tokenService.revokeRefreshToken(refreshToken);
-      
-      // Generate new tokens
-      const tokens = await tokenService.generateTokens(user, deviceInfo, ipAddress);
+
+      // NOTE: deviceUuid is unknown in refresh route unless you pass it.
+      // We keep it null, biometric flag false for new token by default.
+      const tokens = await tokenService.generateTokens(
+        user,
+        deviceInfo,
+        ipAddress,
+        null,
+        false
+      );
 
       return {
         tokens,
@@ -441,7 +407,6 @@ class AuthService {
     }
   }
 
-  // Logout method
   async logout(refreshToken) {
     try {
       await tokenService.revokeRefreshToken(refreshToken);
@@ -452,7 +417,6 @@ class AuthService {
     }
   }
 
-  // Logout all devices method
   async logoutAllDevices(userId) {
     try {
       await tokenService.revokeAllUserTokens(userId);
@@ -463,7 +427,6 @@ class AuthService {
     }
   }
 
-  // Get user sessions
   async getUserSessions(userId) {
     try {
       const sessions = await tokenService.getUserSessions(userId);

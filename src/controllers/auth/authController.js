@@ -13,7 +13,7 @@ exports.signup = async (req, res, next) => {
 
     const { name, email, phoneNumber, password } = req.body;
     const result = await authService.signup(name, email, phoneNumber, password);
-    
+
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
@@ -35,14 +35,20 @@ exports.login = async (req, res, next) => {
 
     const { email, phoneNumber, password } = req.body;
     console.log("Login request:", { email, phoneNumber });
-    
-    const deviceInfo = {
-      userAgent: req.get('User-Agent'),
-    };
-    const ipAddress = req.ip;
 
-    const result = await authService.login(email, phoneNumber, password, deviceInfo, ipAddress);
-    
+    const deviceInfo = { userAgent: req.get('User-Agent') };
+    const ipAddress = req.ip;
+    const deviceUuid = req.body.deviceUUID || req.headers['x-device-uuid'] || null;
+
+    const result = await authService.login(
+      email,
+      phoneNumber,
+      password,
+      deviceInfo,
+      ipAddress,
+      deviceUuid
+    );
+
     res.status(200).json({
       success: true,
       message: 'Login successful',
@@ -56,7 +62,6 @@ exports.login = async (req, res, next) => {
 
 exports.requestOtpLogin = async (req, res, next) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       throw new AppError('Validation failed', 400, 'VALIDATION_ERROR');
@@ -64,7 +69,7 @@ exports.requestOtpLogin = async (req, res, next) => {
 
     const { email, phoneNumber } = req.body;
     const result = await authService.requestOtpLogin(email, phoneNumber);
-    
+
     res.status(200).json({
       success: true,
       message: 'OTP sent successfully',
@@ -78,21 +83,26 @@ exports.requestOtpLogin = async (req, res, next) => {
 
 exports.verifyOtpLogin = async (req, res, next) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       throw new AppError('Validation failed', 400, 'VALIDATION_ERROR');
     }
 
     const { email, phoneNumber, otp } = req.body;
-    
-    const deviceInfo = {
-      userAgent: req.get('User-Agent'),
-    };
-    const ipAddress = req.ip;
 
-    const result = await authService.verifyOtpLogin(email, phoneNumber, otp, deviceInfo, ipAddress);
-    
+    const deviceInfo = { userAgent: req.get('User-Agent') };
+    const ipAddress = req.ip;
+    const deviceUuid = req.body.deviceUUID || req.headers['x-device-uuid'] || null;
+
+    const result = await authService.verifyOtpLogin(
+      email,
+      phoneNumber,
+      otp,
+      deviceInfo,
+      ipAddress,
+      deviceUuid
+    );
+
     res.status(200).json({
       success: true,
       message: 'Login successful',
@@ -106,21 +116,27 @@ exports.verifyOtpLogin = async (req, res, next) => {
 
 exports.verifyOtp = async (req, res, next) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       throw new AppError('Validation failed', 400, 'VALIDATION_ERROR');
     }
 
     const { email, otp, phoneNumber, phoneOtp } = req.body;
-    
-    const deviceInfo = {
-      userAgent: req.get('User-Agent'),
-    };
-    const ipAddress = req.ip;
 
-    const result = await authService.verifyOtp(email, otp, phoneNumber, phoneOtp, deviceInfo, ipAddress);
-    
+    const deviceInfo = { userAgent: req.get('User-Agent') };
+    const ipAddress = req.ip;
+    const deviceUuid = req.body.deviceUUID || req.headers['x-device-uuid'] || null;
+
+    const result = await authService.verifyOtp(
+      email,
+      otp,
+      phoneNumber,
+      phoneOtp,
+      deviceInfo,
+      ipAddress,
+      deviceUuid
+    );
+
     res.status(200).json({
       success: true,
       message: 'OTP verified successfully',
@@ -132,7 +148,7 @@ exports.verifyOtp = async (req, res, next) => {
   }
 };
 
-// New methods for token management
+// New methods for token management remain unchanged
 exports.refreshTokens = async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -141,13 +157,11 @@ exports.refreshTokens = async (req, res, next) => {
     }
 
     const { refreshToken } = req.body;
-    const deviceInfo = {
-      userAgent: req.get('User-Agent'),
-    };
+    const deviceInfo = { userAgent: req.get('User-Agent') };
     const ipAddress = req.ip;
 
     const result = await authService.refreshTokens(refreshToken, deviceInfo, ipAddress);
-    
+
     res.status(200).json({
       success: true,
       message: 'Tokens refreshed successfully',
@@ -168,7 +182,7 @@ exports.logout = async (req, res, next) => {
 
     const { refreshToken } = req.body;
     const result = await authService.logout(refreshToken);
-    
+
     res.status(200).json({
       success: true,
       message: 'Logged out successfully',
@@ -183,7 +197,7 @@ exports.logout = async (req, res, next) => {
 exports.logoutAll = async (req, res, next) => {
   try {
     const result = await authService.logoutAllDevices(req.user.id);
-    
+
     res.status(200).json({
       success: true,
       message: 'Logged out from all devices successfully',
@@ -198,7 +212,7 @@ exports.logoutAll = async (req, res, next) => {
 exports.getUserSessions = async (req, res, next) => {
   try {
     const result = await authService.getUserSessions(req.user.id);
-    
+
     res.status(200).json({
       success: true,
       message: 'Sessions retrieved successfully',

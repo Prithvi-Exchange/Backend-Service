@@ -1,4 +1,4 @@
-// models/RefreshToken.js
+// src/models/auth/RefreshToken.js
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
 
@@ -15,7 +15,7 @@ const RefreshToken = sequelize.define('RefreshToken', {
   userId: {
     type: DataTypes.UUID,
     allowNull: false,
-    field: 'user_id' // This maps camelCase to snake_case in DB
+    field: 'user_id'
   },
   expiresAt: {
     type: DataTypes.DATE,
@@ -36,6 +36,18 @@ const RefreshToken = sequelize.define('RefreshToken', {
     type: DataTypes.STRING,
     allowNull: true,
     field: 'ip_address'
+  },
+  // NEW: unique identifier from client (e.g. react-native-device-info getUniqueId)
+  deviceUuid: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'device_uuid'
+  },
+  // NEW: toggle indicating this device can use biometric login
+  isBiometricEnabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    field: 'is_biometric_enabled'
   }
 }, {
   tableName: 'refresh_tokens',

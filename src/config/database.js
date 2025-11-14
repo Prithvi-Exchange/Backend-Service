@@ -28,6 +28,9 @@ const sequelize = new Sequelize(
 );
 
 const connectDB = async () => {
+  console.log("Data",process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASSWORD)
   try {
     await sequelize.authenticate();
     console.log('✅ PostgreSQL connected successfully to Prithvi Exchange database');

@@ -8,6 +8,8 @@ const rateLimit = require('express-rate-limit');
 
 // Import token routes
 const tokenRoutes = require('./tokenRoutes');
+// NEW: import biometric sub-routes
+const biometricRoutes = require('./biometricRoutes');
 
 // Rate limiting configuration
 const passwordResetLimiter = rateLimit({
@@ -62,38 +64,7 @@ router.use(authLimiter);
  * /auth/signup:
  *   post:
  *     summary: Register a new user account with dual OTP verification
- *     description: |
- *       Create a new user account with email, phone number, and secure password.
- *       - Sends OTP to both email and phone number for verification
- *       - Both OTPs need to be verified for full account activation
  *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *               - password
- *             properties:
- *               name:
- *                 type: string
- *                 example: "John Doe"
- *               email:
- *                 type: string
- *                 format: email
- *                 example: "john.doe@example.com"
- *               phoneNumber:
- *                 type: string
- *                 example: "+918178352411"
- *               password:
- *                 type: string
- *                 format: password
- *                 example: "SecurePass123!"
- *     responses:
- *       201:
- *         description: User registered successfully, OTPs sent for verification
  */
 router.post('/signup', validation.validateSignup, authController.signup);
 
@@ -102,54 +73,7 @@ router.post('/signup', validation.validateSignup, authController.signup);
  * /auth/login:
  *   post:
  *     summary: Authenticate user with password
- *     description: Login using email OR phone number with password. Returns access token and refresh token.
  *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - password
- *             oneOf:
- *               - required: [email]
- *               - required: [phoneNumber]
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               phoneNumber:
- *                 type: string
- *               password:
- *                 type: string
- *                 format: password
- *     responses:
- *       200:
- *         description: Login successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     tokens:
- *                       type: object
- *                       properties:
- *                         accessToken:
- *                           type: string
- *                         refreshToken:
- *                           type: string
- *                         accessTokenExpires:
- *                           type: string
- *                     user:
- *                       type: object
  */
 router.post('/login', validation.validateLogin, authController.login);
 
@@ -158,30 +82,12 @@ router.post('/login', validation.validateLogin, authController.login);
  * /auth/request-otp-login:
  *   post:
  *     summary: Request OTP for passwordless login
- *     description: Request OTP to be sent to email or phone for login
  *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             oneOf:
- *               - required: [email]
- *               - required: [phoneNumber]
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               phoneNumber:
- *                 type: string
- *     responses:
- *       200:
- *         description: OTP sent successfully
  */
-router.post('/request-otp-login', 
+router.post(
+  '/request-otp-login',
   otpLimiter,
-  validation.validateOtpLoginRequest, 
+  validation.validateOtpLoginRequest,
   authController.requestOtpLogin
 );
 
@@ -190,34 +96,12 @@ router.post('/request-otp-login',
  * /auth/verify-otp-login:
  *   post:
  *     summary: Verify OTP for passwordless login
- *     description: Login using OTP sent to email or phone. Returns access token and refresh token.
  *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - otp
- *             oneOf:
- *               - required: [email]
- *               - required: [phoneNumber]
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               phoneNumber:
- *                 type: string
- *               otp:
- *                 type: string
- *     responses:
- *       200:
- *         description: Login successful
  */
-router.post('/verify-otp-login', 
+router.post(
+  '/verify-otp-login',
   otpLimiter,
-  validation.validateOtpLogin, 
+  validation.validateOtpLogin,
   authController.verifyOtpLogin
 );
 
@@ -226,37 +110,12 @@ router.post('/verify-otp-login',
  * /auth/verify-otp:
  *   post:
  *     summary: Verify OTPs for email and phone verification
- *     description: |
- *       Verify OTPs sent during signup for both email and phone verification.
- *       - Can verify both OTPs in single request or separately
- *       - Account fully activated when both are verified
- *       - Returns access token and refresh token upon successful verification
  *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               phoneNumber:
- *                 type: string
- *               otp:
- *                 type: string
- *                 description: "Email OTP"
- *               phoneOtp:
- *                 type: string
- *                 description: "Phone OTP"
- *     responses:
- *       200:
- *         description: OTPs verified successfully
  */
-router.post('/verify-otp', 
+router.post(
+  '/verify-otp',
   otpLimiter,
-  validation.validateVerifyOtp, 
+  validation.validateVerifyOtp,
   authController.verifyOtp
 );
 
@@ -267,9 +126,10 @@ router.post('/verify-otp',
  *     summary: Request password reset instructions
  *     tags: [Authentication]
  */
-router.post('/forgot-password', 
+router.post(
+  '/forgot-password',
   passwordResetLimiter,
-  validation.validatePasswordResetRequest, 
+  validation.validatePasswordResetRequest,
   passwordController.requestReset
 );
 
@@ -280,13 +140,17 @@ router.post('/forgot-password',
  *     summary: Reset user password using reset token
  *     tags: [Authentication]
  */
-router.post('/reset-password', 
+router.post(
+  '/reset-password',
   passwordResetLimiter,
-  validation.validatePasswordReset, 
+  validation.validatePasswordReset,
   passwordController.resetPassword
 );
 
 // Use token routes
 router.use('/', tokenRoutes);
+
+// NEW: mount biometric routes
+router.use('/', biometricRoutes);
 
 module.exports = router;

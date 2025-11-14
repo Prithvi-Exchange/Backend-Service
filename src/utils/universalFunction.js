@@ -1,4 +1,5 @@
-export const generateUsername = (email) => {
+// src/utils/universalFunction.js
+const generateUsername = (email) => {
   const base = email.split('@')[0];
   const randomStr = Array.from({ length: 8 }, () => {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -6,3 +7,5 @@ export const generateUsername = (email) => {
   }).join('');
   return `${base}${randomStr}`;
 };
+
+module.exports = { generateUsername };
