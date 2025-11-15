@@ -1,0 +1,74 @@
+name: CI/CD Deploy to EC2
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Install jq (for parsing secrets)
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Fetch DB connection secret
+        id: fetch_secret
+        run: |
+          aws secretsmanager get-secret-value --secret-id myapp/rds/connection --query SecretString --output text > conn.json
+          echo "DB_USER=$(jq -r .username conn.json)" >> $GITHUB_ENV
+          echo "DB_PASS=$(jq -r .password conn.json)" >> $GITHUB_ENV
+          echo "DB_HOST=$(jq -r .host conn.json)" >> $GITHUB_ENV
+          echo "DB_PORT=$(jq -r .port conn.json)" >> $GITHUB_ENV
+          echo "DB_NAME=$(jq -r .dbname conn.json)" >> $GITHUB_ENV
+
+      - name: Prepare SSH key for deploy
+        run: |
+          printf "%s\n" "${{ secrets.EC2_SSH_KEY }}" > deploy_key
+          chmod 600 deploy_key
+          mkdir -p ~/.ssh
+          # add EC2 host to known_hosts to avoid prompt (replace IP if it changes)
+          ssh-keyscan -H 13.203.141.27 >> ~/.ssh/known_hosts
+
+      - name: Rsync repository to EC2
+        env:
+          EC2_USER: app
+          EC2_HOST: 13.203.141.27
+        run: |
+          # ensure destination directory exists and has proper owner
+          ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'mkdir -p /home/app/app && chown app:app /home/app/app || true'
+          rsync -az --delete --exclude='.git' --exclude='node_modules' -e "ssh -i deploy_key -o StrictHostKeyChecking=yes" ./ ${EC2_USER}@${EC2_HOST}:/home/app/app/
+
+      - name: Install dependencies & restart via PM2 on EC2
+        env:
+          EC2_USER: app
+          EC2_HOST: 13.203.141.27
+        run: |
+          ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} bash -s <<'REMOTE'
+            set -eux
+            cd /home/app/app
+            # ensure correct ownership
+            sudo chown -R app:app /home/app/app
+            # install production dependencies
+            npm ci --only=production || npm install --production
+            # use PM2 to run the app (assumes package.json has "start" script)
+            pm2 describe app || pm2 start npm --name app -- start
+            pm2 restart app || true
+            pm2 save
+REMOTE
+
+      - name: Cleanup deploy key
+        run: shred -u deploy_key || rm -f deploy_key
