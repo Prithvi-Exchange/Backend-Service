@@ -1,2 +1,2 @@
 # Backend-Service
-Main backend service handling business logic and integrations.
+Main backend service handling business logic and integrations
