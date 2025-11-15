@@ -6,7 +6,7 @@ async function setupDatabase() {
     // Test connection
     await sequelize.authenticate();
     console.log('✅ Connection established successfully');
-    
+
     // Sync all models
     await sequelize.sync({ force: false });
     console.log('✅ All models were synchronized successfully');
