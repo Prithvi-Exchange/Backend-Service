@@ -42,35 +42,31 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H 13.203.141.27 >> ~/.ssh/known_hosts
 
+      - name: Ensure remote app dir exists and write .env.production securely
+        env:
+          EC2_USER: app
+          EC2_HOST: 13.203.141.27
+        run: |
+          # ensure destination directory exists and has correct owner
+          ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'mkdir -p /home/app/app && chown app:app /home/app/app || true'
+
+          # write .env.production to remote by streaming from runner stdin to ssh
+          ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} "cat > /home/app/app/.env.production" <<EOF
+NODE_ENV=production
+DB_HOST=${DB_HOST}
+DB_PORT=${DB_PORT}
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASS=${DB_PASS}
+EOF
+          # fix ownership and permissions
+          ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'chown app:app /home/app/app/.env.production && chmod 600 /home/app/app/.env.production'
+
       - name: Rsync repository to EC2
         env:
           EC2_USER: app
           EC2_HOST: 13.203.141.27
-          DB_USER: ${{ env.DB_USER }}
-          DB_PASS: ${{ env.DB_PASS }}
-          DB_HOST: ${{ env.DB_HOST }}
-          DB_PORT: ${{ env.DB_PORT }}
-          DB_NAME: ${{ env.DB_NAME }}
         run: |
-          # ensure destination directory exists and has proper owner
-          ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'mkdir -p /home/app/app && chown app:app /home/app/app || true'
-          
-          # Write .env.production on the remote host securely using heredoc (runs on remote)
-          ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} bash -s <<'REMOTE_ENV'
-set -eux
-cat > /home/app/app/.env.production <<'ENVEOF'
-NODE_ENV=production
-DB_HOST='"'"${DB_HOST}"'"'
-DB_PORT='"'"${DB_PORT}"'"'
-DB_NAME='"'"${DB_NAME}"'"'
-DB_USER='"'"${DB_USER}"'"'
-DB_PASS='"'"${DB_PASS}"'"'
-ENVEOF
-chown app:app /home/app/app/.env.production
-chmod 600 /home/app/app/.env.production
-REMOTE_ENV
-
-          # Now rsync code (excludes .git and node_modules)
           rsync -az --delete --exclude='.git' --exclude='node_modules' -e "ssh -i deploy_key -o StrictHostKeyChecking=yes" ./ ${EC2_USER}@${EC2_HOST}:/home/app/app/
 
       - name: Install dependencies & restart via PM2 on EC2
@@ -79,16 +75,18 @@ REMOTE_ENV
           EC2_HOST: 13.203.141.27
         run: |
           ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} bash -s <<'REMOTE'
-            set -eux
+            set -e
             cd /home/app/app
             sudo chown -R app:app /home/app/app
-            # install production dependencies
             npm ci --only=production || npm install --production
-            # start or restart pm2 app (assumes package.json has "start")
-            pm2 describe app || pm2 start npm --name app -- start
-            pm2 restart app || true
+            if pm2 describe app > /dev/null 2>&1; then
+              pm2 restart app
+            else
+              pm2 start npm --name app -- start
+            fi
             pm2 save
 REMOTE
 
       - name: Cleanup deploy key
         run: shred -u deploy_key || rm -f deploy_key
+YAML
