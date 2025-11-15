@@ -52,13 +52,13 @@ jobs:
 
           # write .env.production to remote by streaming from runner stdin to ssh
           ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} "cat > /home/app/app/.env.production" <<EOF
-NODE_ENV=production
-DB_HOST=${DB_HOST}
-DB_PORT=${DB_PORT}
-DB_NAME=${DB_NAME}
-DB_USER=${DB_USER}
-DB_PASS=${DB_PASS}
-EOF
+          NODE_ENV=production
+          DB_HOST=${DB_HOST}
+          DB_PORT=${DB_PORT}
+          DB_NAME=${DB_NAME}
+          DB_USER=${DB_USER}
+          DB_PASS=${DB_PASS}
+          EOF
           # fix ownership and permissions
           ssh -i deploy_key -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'chown app:app /home/app/app/.env.production && chmod 600 /home/app/app/.env.production'
 
@@ -85,8 +85,7 @@ EOF
               pm2 start npm --name app -- start
             fi
             pm2 save
-REMOTE
+          REMOTE
 
       - name: Cleanup deploy key
         run: shred -u deploy_key || rm -f deploy_key
-YAML
