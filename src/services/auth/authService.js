@@ -212,7 +212,7 @@ class AuthService {
           if (process.env.NODE_ENV === 'development') {
             console.log(`Login OTP for phone ${phoneNumber}: ${phoneOtp.code}`);
           }
-          otpResults.phone = { message: 'OTP sent to phone for login', expiresAt: phoneOtp.expiresAt };
+          otpResults.phone = { message: `OTP sent to phone for login : ${phoneOtp.code}`, expiresAt: phoneOtp.expiresAt };
         } catch (error) {
           console.error('Failed to send phone OTP:', error);
           otpResults.phone = { message: 'Failed to send phone OTP', error: error.message };
